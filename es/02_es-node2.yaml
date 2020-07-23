@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: es-node2
+  namespace: es
+  labels:
+    app: es-node2
+spec:
+  clusterIP: None
+  ports:
+    - port: 9300
+      protocol: TCP
+      name: port-9300
+    - port: 9200
+      protocol: TCP
+      name: port-9200
+  selector:
+    app: es-node2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: es-node2
+  namespace: es
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: es-node2
+  template:
+    metadata:
+      labels:
+        app: es-node2
+    spec:
+      nodeName: fwpt.k8s.node3
+      containers:
+        - name: es-node2
+          image: elasticsearch:7.7.1
+          imagePullPolicy: Always
+          livenessProbe:
+            httpGet:
+              port: 9200
+            periodSeconds: 10
+          ports:
+            - containerPort: 9200
+              protocol: TCP
+            - containerPort: 9300
+              protocol: TCP
+          env:
+            - name: ES_JAVA_OPTS
+              value: "-Xmx1g -Xms1g"
+            - name: node.master
+              value: "true"
+            - name: node.data
+              value: "true"
+            - name: node.name
+              value: "es-node2"
+            - name: cluster.name
+              value: "es-cluster-zhili-k8s"
+            - name: discovery.seed_hosts
+              value: "es-node1,es-node2"
+            - name: cluster.initial_master_nodes
+              value: "es-node1,es-node2"
+          volumeMounts:
+            - mountPath: /usr/share/elasticsearch/data
+              name: es-data
+      volumes:
+        - name: es-data
+          hostPath:
+            path: /es-data
