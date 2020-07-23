@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cerebro
+  namespace: es
+  labels:
+    app: cerebro
+spec:
+  ports:
+  - port: 9001
+    targetPort: 9001
+  type: NodePort
+  selector:
+    app: cerebro
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cerebro
+  namespace: es
+  labels:
+    app: cerebro
+spec:
+  selector:
+    matchLabels:
+      app: cerebro
+  template:
+    metadata:
+      labels:
+        app: cerebro
+    spec:
+      nodeName: fwpt.k8s.node3
+      containers:
+      - name: cerebro
+        image: lmenezes/cerebro:0.9.2
+        resources:
+          limits:
+            cpu: '1'
+            memory: 500Mi
+          requests:
+            cpu: '0.1'
+        env:
+        - name: CEREBRO_PORT
+          value: '9001'
+        ports:
+        - containerPort: 9001
