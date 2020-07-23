@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: es-node1
+  namespace: es
+  labels:
+    app: es-node1
+spec:
+  # 不需要VIP
+  clusterIP: None
+  ports:
+    - port: 9300
+      protocol: TCP
+      name: port-9300
+    - port: 9200
+      protocol: TCP
+      name: port-9200
+  selector:
+    app: es-node1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: es-node1
+  namespace: es
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: es-node1
+  template:
+    metadata:
+      labels:
+        app: es-node1
+    spec:
+      # 使用node Selector
+      nodeSelector:
+        name: fwpt.k8s.node2
+      containers:
+        - name: es-node1
+          image: elasticsearch:7.7.1
+          imagePullPolicy: Always
+          livenessProbe:
+            httpGet:
+              port: 9200
+            periodSeconds: 10
+          ports:
+            - containerPort: 9200
+              protocol: TCP
+            - containerPort: 9300
+              protocol: TCP
+          env:
+            - name: ES_JAVA_OPTS
+              value: "-Xmx1g -Xms1g"
+            - name: node.master
+              value: "true"
+            - name: node.data
+              value: "true"
+              # 定义节点名
+            - name: node.name
+              value: "es-node1"
+            - name: cluster.name
+              value: "es-cluster-zhili-k8s"
+            - name: discovery.seed_hosts
+              value: "es-node1,es-node2"
+              # 定义master节点,由于我们都在default namespace中，所以直接用简写即可
+            - name: cluster.initial_master_nodes
+              value: "es-node1,es-node2"
+          volumeMounts:
+            - mountPath: /usr/share/elasticsearch/data
+              name: es-data
+      # 采用hostpath方式挂载
+      volumes:
+        - name: es-data
+          hostPath:
+            path: /es-data/
