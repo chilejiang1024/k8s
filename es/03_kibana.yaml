@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana
+  namespace: es
+  labels:
+    app: kibana
+spec:
+  ports:
+  - port: 5601
+  type: NodePort
+  selector:
+    app: kibana
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+  namespace: es
+  labels:
+    app: kibana
+spec:
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+    spec:
+      nodeName: fwpt.k8s.node2
+      containers:
+      - name: kibana
+        image: elastic/kibana:7.7.1
+        resources:
+          limits:
+            # cpu: '1'
+            # memory: 1Gi
+          requests:
+            # cpu: '0.1'
+        env:
+        - name: ELASTICSEARCH_HOSTS
+          value: 'http://es-node1:9200'
+        - name: XPACK_GRAPH_ENABLED1
+          value: 'false'
+        - name: XPACK_ML_ENABLED1
+          value: 'false'
+        - name: XPACK_REPORTING_ENABLED1
+          value: 'false'
+        - name: XPACK_SECURITY_ENABLED1
+          value: 'false'
+        - name: XPACK_DASHBOARD_VIEWER
+          value: 'false'
+        - name: NODE_OPTIONS
+          value: '--max-old-space-size=2048'
+        ports:
+        - containerPort: 5601
