@@ -1,0 +1,128 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: logstash
+  namespace: es
+  labels:
+    app: logstash
+spec:
+  ports:
+    - port: 9600
+      targetPort: 9600
+  type: NodePort
+  selector:
+    app: logstash
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: logstash-volume-claim
+  namespace: es
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: rook-ceph-block
+  resources:
+    requests:
+      storage: 2Gi
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: logstash-config
+  namespace: es
+data:
+  logstash-movies.conf: |
+    input {
+      file {
+        path => "/logstash-data/ml-latest-small/movies.csv"
+        start_position => "beginning"
+        sincedb_path => "/dev/null"
+      }
+    }
+    filter {
+      csv {
+        separator => ","
+        columns => ["id","content","genre"]
+      }
+
+      mutate {
+        split => { "genre" => "|" }
+        remove_field => ["path", "host","@timestamp","message"]
+      }
+
+      mutate {
+
+        split => ["content", "("]
+        add_field => { "title" => "%{[content][0]}"}
+        add_field => { "year" => "%{[content][1]}"}
+      }
+
+      mutate {
+        convert => {
+          "year" => "integer"
+        }
+        strip => ["title"]
+        remove_field => ["path", "host","@timestamp","message","content"]
+      }
+
+    }
+    output {
+      elasticsearch {
+        hosts => "http://es-node1:9200"
+        index => "movies"
+        document_id => "%{id}"
+      }
+      stdout {}
+    }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: logstash
+  namespace: es
+  labels:
+    app: logstash
+spec:
+  template:
+    metadata:
+      labels:
+        app: logstash
+    spec:
+      restartPolicy: "OnFailure"
+      nodeName: fwpt.k8s.node3
+      containers:
+        - name: logstash
+          image: logstash:7.7.1
+          command: ["/bin/sh","-c"]
+          args: ["/usr/share/logstash/bin/logstash -f /usr/share/logstash/config/zhili/logstash-movies.conf"]
+          resources:
+            limits:
+              cpu: '2'
+              memory: 2Gi
+            requests:
+              cpu: '0.1'
+              memory: 2Gi
+          env:
+            - name: "XPACK_MONITORING_ELASTICSEARCH_HOSTS"
+              value: "http://es-node1:9200"
+          ports:
+            - containerPort: 9600
+          volumeMounts:
+            - name: logstash-volume
+              mountPath: /usr/share/logstash/pipeline
+            - name: logstash-config
+              mountPath: /usr/share/logstash/config/zhili/logstash-movies.conf
+              subPath: logstash-movies.conf
+            - name: logstash-data
+              mountPath: /logstash-data
+      volumes:
+        - name: logstash-volume
+          persistentVolumeClaim:
+            claimName: logstash-volume-claim
+        - name: logstash-config
+          configMap:
+            name: logstash-config
+        - name: logstash-data
+          hostPath:
+            path: /k8s/volumes/logstash-data
+
